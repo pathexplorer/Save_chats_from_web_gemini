@@ -8,12 +8,19 @@
     const clone = element.cloneNode(true);
     const controls = clone.querySelectorAll('button, .message-actions, [class*="actions"], .share-menu, .copy-button');
     controls.forEach(el => el.remove());
-    return domToMarkdown(clone).trim();
+    let text = domToMarkdown(clone).trim();
+    // Reduce excessive blank lines (more than 2 consecutive) to just 2
+    text = text.replace(/\n{3,}/g, '\n\n');
+    return text;
   }
 
   function domToMarkdown(node, context = {}) {
-    const { listType = null, listIndex = 1, depth = 0 } = context;
+    const { listType = null, listIndex = 1, depth = 0, preserveWhitespace = false } = context;
     if (node.nodeType === Node.TEXT_NODE) {
+      // Preserve whitespace in code contexts
+      if (preserveWhitespace) {
+        return node.nodeValue;
+      }
       return node.nodeValue.replace(/\s+/g, ' ');
     }
     if (node.nodeType !== Node.ELEMENT_NODE) {
@@ -22,7 +29,7 @@
 
     const tag = node.tagName.toLowerCase();
     const children = Array.from(node.childNodes)
-      .map(child => domToMarkdown(child, { listType, listIndex, depth }))
+      .map(child => domToMarkdown(child, { listType, listIndex, depth, preserveWhitespace }))
       .join('');
 
     switch (tag) {
@@ -38,6 +45,7 @@
       case 'p':
         return `\n\n${children.trim()}\n\n`;
       case 'br':
+        // Preserve single line breaks for better code formatting
         return '\n';
       case 'blockquote':
         return `\n\n> ${children.trim().replace(/\n/g, '\\n> ')}\n\n`;
@@ -76,11 +84,16 @@ ${mdRows.join('\n')}
         const codeText = node.textContent.replace(/ /g, ' ').trim();
         return `\n\n\`\`\`\n${codeText}\n\`\`\`\n\n`;
       }
-      case 'code':
+      case 'code': {
         if (node.parentElement && node.parentElement.tagName.toLowerCase() === 'pre') {
-          return children;
+          // Preserve whitespace inside code blocks
+          const codeContent = Array.from(node.childNodes)
+            .map(child => domToMarkdown(child, { ...context, preserveWhitespace: true }))
+            .join('');
+          return codeContent;
         }
         return `\`${children.trim()}\``;
+      }
       case 'a': {
         const href = node.getAttribute('href') || node.textContent.trim();
         return `[${children.trim()}](${href})`;
@@ -138,9 +151,18 @@ ${mdRows.join('\n')}
       const response = container.querySelector('model-response, .model-response, .response-content, .response-container-content, response-container, .presented-response-container');
 
       if (user) {
-        const userText = normalizeText(user);
+        let userText = normalizeText(user).replace(/^You said\s*/, '').trim();
+        
+        // If user question contains code-like content (indentation, brackets, etc), wrap in code block
+        if (userText && /[\{\}\[\]\(\):=]/.test(userText) && userText.split('\n').length > 3) {
+          // Check if not already in a code block
+          if (!userText.startsWith('```')) {
+            userText = `\`\`\`\n${userText}\n\`\`\``;
+          }
+        }
+        
         if (userText) {
-          markdown += `## Question ${index + 1}\n${userText.replace(/^You said\s*/, '')}\n\n`;
+          markdown += `## Question ${index + 1}\n${userText}\n\n`;
         }
       }
 

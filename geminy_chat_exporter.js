@@ -157,6 +157,8 @@ ${mdRows.join('\n')}
         if (userText && /[\{\}\[\]\(\):=]/.test(userText) && userText.split('\n').length > 3) {
           // Check if not already in a code block
           if (!userText.startsWith('```')) {
+            // Remove excessive double newlines within code (keep single newlines)
+            userText = userText.replace(/\n\n+/g, '\n');
             userText = `\`\`\`\n${userText}\n\`\`\``;
           }
         }

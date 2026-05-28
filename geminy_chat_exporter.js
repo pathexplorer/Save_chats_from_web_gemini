@@ -6,19 +6,122 @@
 
   function normalizeText(element) {
     const clone = element.cloneNode(true);
-    const codeBlocks = Array.from(clone.querySelectorAll('pre'));
-    codeBlocks.forEach(block => {
-      const codeText = block.textContent.trim();
-      const lang = block.getAttribute('data-language') || '';
-      const fenced = `\n\`\`\`${lang}\n${codeText}\n\`\`\`\n`;
-      const textNode = document.createTextNode(fenced);
-      block.parentNode.replaceChild(textNode, block);
-    });
-
     const controls = clone.querySelectorAll('button, .message-actions, [class*="actions"], .share-menu, .copy-button');
     controls.forEach(el => el.remove());
+    return domToMarkdown(clone).trim();
+  }
 
-    return clone.textContent.trim();
+  function domToMarkdown(node, context = {}) {
+    const { listType = null, listIndex = 1, depth = 0 } = context;
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.nodeValue.replace(/\s+/g, ' ');
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return '';
+    }
+
+    const tag = node.tagName.toLowerCase();
+    const children = Array.from(node.childNodes)
+      .map(child => domToMarkdown(child, { listType, listIndex, depth }))
+      .join('');
+
+    switch (tag) {
+      case 'h1':
+      case 'h2':
+      case 'h3':
+      case 'h4':
+      case 'h5':
+      case 'h6': {
+        const level = parseInt(tag[1], 10);
+        return `\n\n${'#'.repeat(level)} ${children.trim()}\n\n`;
+      }
+      case 'p':
+        return `\n\n${children.trim()}\n\n`;
+      case 'br':
+        return '\n';
+      case 'blockquote':
+        return `\n\n> ${children.trim().replace(/\n/g, '\\n> ')}\n\n`;
+      case 'table': {
+        const rows = Array.from(node.querySelectorAll('tr'));
+        if (!rows.length) return '';
+
+        const mdRows = rows.map(row => {
+          const cells = Array.from(row.children).filter(child => {
+            const tagName = child.tagName.toLowerCase();
+            return tagName === 'td' || tagName === 'th';
+          });
+          const cellTexts = cells.map(cell => domToMarkdown(cell, { depth: 0 }).trim().replace(/\|/g, '\|'));
+          return `| ${cellTexts.join(' | ')} |`;
+        });
+
+        const firstRow = rows[0];
+        const separatorRow = `| ${Array.from(firstRow.children).filter(child => {
+          const tagName = child.tagName.toLowerCase();
+          return tagName === 'td' || tagName === 'th';
+        }).map(() => '---').join(' | ')} |`;
+        if (mdRows.length > 1) {
+          mdRows.splice(1, 0, separatorRow);
+        }
+
+        return `
+
+${mdRows.join('\n')}
+
+`;
+      }
+      case 'th':
+      case 'td':
+        return children.trim();
+      case 'pre': {
+        const codeText = node.textContent.replace(/ /g, ' ').trim();
+        return `\n\n\`\`\`\n${codeText}\n\`\`\`\n\n`;
+      }
+      case 'code':
+        if (node.parentElement && node.parentElement.tagName.toLowerCase() === 'pre') {
+          return children;
+        }
+        return `\`${children.trim()}\``;
+      case 'a': {
+        const href = node.getAttribute('href') || node.textContent.trim();
+        return `[${children.trim()}](${href})`;
+      }
+      case 'ul':
+        return `\n${Array.from(node.children)
+          .map(child => domToMarkdown(child, { listType: 'ul', depth: depth + 1 }))
+          .join('')}\n`;
+      case 'ol': {
+        let index = 0;
+        return `\n${Array.from(node.children)
+          .map(child => {
+            index += 1;
+            return domToMarkdown(child, { listType: 'ol', listIndex: index, depth: depth + 1 });
+          })
+          .join('')}\n`;
+      }
+      case 'li': {
+        const indent = '  '.repeat(Math.max(0, depth - 1));
+        const prefix = listType === 'ol' ? `${listIndex}. ` : '- ';
+        const line = children.trim().replace(/\n/g, `\n${indent}  `);
+        return `${indent}${prefix}${line}\n`;
+      }
+      case 'strong':
+      case 'b':
+        return `**${children.trim()}**`;
+      case 'em':
+      case 'i':
+        return `*${children.trim()}*`;
+      case 'u':
+        return `_${children.trim()}_`;
+      case 'span':
+      case 'div':
+      case 'section':
+      case 'article':
+      case 'header':
+      case 'footer':
+        return children;
+      default:
+        return children;
+    }
   }
 
   function exportCurrentChat() {

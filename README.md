@@ -10,3 +10,6 @@ How run:
 6. Paste code to console
 7. Press the floating blue button "Export gemini Chat"
 8. Ready, you have .md file in your Download page
+
+Current pitfalls:
+- does not support saving image attachments in the questions 

@@ -479,9 +479,27 @@
     }
   }
 
-  // --- Initialize ---
+  // --- Expose for testing (if Node environment) ---
+  var exported = {
+    sanitizeFilename: sanitizeFilename,
+    getChatTitle: getChatTitle,
+    normalizeText: normalizeText,
+    domToMarkdown: domToMarkdown,
+    showToast: showToast,
+    exportCurrentChat: exportCurrentChat,
+    performExport: performExport,
+    startZipperAutoExport: startZipperAutoExport,
+    createExportButton: createExportButton,
+    createZipperButton: createZipperButton
+  };
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = exported;
+  }
 
-  createExportButton();
-  createZipperButton();
-  startZipperAutoExport();
+  // --- Initialize (skip if no DOM) ---
+  if (typeof document !== 'undefined') {
+    createExportButton();
+    createZipperButton();
+    startZipperAutoExport();
+  }
 })();
